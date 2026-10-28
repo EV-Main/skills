@@ -34,16 +34,26 @@ skills/<name>/            one published unit
 docs/refs/                third-party skills we take ideas from; never published, see its README
 ```
 
+## Codemap
+
+`skargo`, the binary at the repo root: `check` for this (or any) skill repo, `lock`/`install` for consumers.
+
+- `src/check.rs`: validates every tracked `SKILL.md`, lists unreleased tags, owns the `plugins` array of
+  `.claude-plugin/marketplace.json` (the rest of that file is hand-written).
+- `src/lock.rs`: `skargo.toml` (`name = { git, version }`) → `skargo.lock` (`name · git · path · version · commit`).
+  The skill's path in its repo is derived from the frontmatter `name` at the resolved tag.
+- `src/install.rs`: store in `$XDG_DATA_HOME/skargo`, directory symlinks from both agent dirs; touches only its own links.
+- `nix/home-manager.nix`: `homeManagerModules.default`, the same layout as `install`, built from a lock.
+- `.github/workflows/publish.yml`: `check` on PRs; on main, also tags what `check` reports unreleased.
+
 ## Invariants
 
 - **A skill's version lives in exactly one place**: `metadata.version` in its `SKILL.md` frontmatter. Every
   other place a version appears (tags, plugin manifests, locks) is derived from it.
 - **A released tag is immutable.** `<name>--v<version>` is the naming Claude Code's plugin dependency resolver
-  reads, so both resolvers see one history.
-- **Version requirements mean what they mean in Cargo**, bare versions included (`1.1` is `^1.1`).
-- **A skill is self-contained.** Each one installs as its own directory at its own version, so every relative
-  link resolves inside it. Anything outside — another skill, a repo — is an absolute URL.
-- **One `SKILL.md` per skill, at its root.** Installers scan recursively, and a nested one would be published
-  as a second skill.
-- **Frontmatter carries spec fields only** (`name`, `description`, `license`, `compatibility`, `metadata`,
-  `allowed-tools`): one payload, read unchanged by every agent.
+  reads, so both resolvers see one history. `skargo` refuses a moved or deleted tag it has locked, but only
+  the forge can stop one from moving.
+
+Every other rule on skill content (spec-only frontmatter, one `SKILL.md` per skill, links staying inside the
+skill, no content change without a bump, versions only growing) is `skargo check`; Cargo requirement
+semantics are pinned by `tests/skargo.rs`.
