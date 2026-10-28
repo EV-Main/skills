@@ -4,7 +4,7 @@ use std::{
 	path::Path,
 };
 
-use miette::{IntoDiagnostic, Result, WrapErr, bail};
+use miette::{IntoDiagnostic, Result, WrapErr, bail, miette};
 use semver::{Version, VersionReq};
 use serde::{Deserialize, Serialize};
 
@@ -88,13 +88,14 @@ pub(crate) fn sync(dir: &Path) -> Result<Vec<Locked>> {
 		if let Some(pin) = previous.remove(name).filter(|pin| pin.git == req.git && req.version.matches(&pin.version)) {
 			match releases.iter().find(|(v, _)| *v == pin.version) {
 				Some((_, commit)) if **commit == pin.commit => locked.push(pin),
-				Some((_, commit)) => bail!(
-					"tag {} in {} moved from {} to {commit}; released tags are immutable",
-					git::tag(name, &pin.version),
-					req.git,
-					pin.commit
-				),
-				None => bail!("tag {} in {} is gone; released tags are immutable", git::tag(name, &pin.version), req.git),
+				Some((_, commit)) =>
+					return Err(miette!(
+						"tag {} in {} moved from {} to {commit}; released tags are immutable",
+						git::tag(name, &pin.version),
+						req.git,
+						pin.commit
+					)),
+				None => return Err(miette!("tag {} in {} is gone; released tags are immutable", git::tag(name, &pin.version), req.git)),
 			}
 			continue;
 		}
@@ -132,11 +133,12 @@ fn resolve(name: &str, url: &str, version: &Version, commit: &str) -> Result<Loc
 	}
 	let (file, fm) = match matches.as_slice() {
 		[one] => one,
-		[] => bail!("{tag} in {url} has no SKILL.md named {name:?}; candidates: [{}]", candidates.join(", ")),
-		many => bail!(
-			"{tag} in {url} has several SKILL.md named {name:?}: [{}]",
-			many.iter().map(|(f, _)| *f).collect::<Vec<_>>().join(", ")
-		),
+		[] => return Err(miette!("{tag} in {url} has no SKILL.md named {name:?}; candidates: [{}]", candidates.join(", "))),
+		many =>
+			return Err(miette!(
+				"{tag} in {url} has several SKILL.md named {name:?}: [{}]",
+				many.iter().map(|(f, _)| *f).collect::<Vec<_>>().join(", ")
+			)),
 	};
 	if fm.version != *version {
 		bail!("{tag} in {url}: {file} says metadata.version {}, the tag says {version}", fm.version);
