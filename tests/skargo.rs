@@ -439,7 +439,7 @@ fn home_manager_module_links_what_the_lock_pins() {
 	let expr = format!(
 		r#"
 		let
-			lib = (builtins.getFlake "git+file://{root}").inputs.v_flakes.nixpkgs.lib;
+			lib = (builtins.getFlake "git+file://{root}?shallow=1").inputs.v_flakes.nixpkgs.lib;
 			stub = {{ lib, ... }}: {{
 				options.home.file = lib.mkOption {{ type = lib.types.attrsOf lib.types.anything; }};
 				options.home.packages = lib.mkOption {{ type = lib.types.listOf lib.types.anything; }};

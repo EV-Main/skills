@@ -1,6 +1,6 @@
 use std::{collections::BTreeMap, path::Path, process::Command};
 
-use miette::{IntoDiagnostic, Result, WrapErr, bail};
+use miette::{IntoDiagnostic, Result, WrapErr, bail, miette};
 use tempfile::TempDir;
 
 /// Skill names can't contain `--` (agentskills spec), so the first occurrence splits unambiguously.
@@ -26,7 +26,7 @@ pub(crate) fn holds(dir: &Path, args: &[&str]) -> Result<bool> {
 	match out.status.code() {
 		Some(0) => Ok(true),
 		Some(1) => Ok(false),
-		_ => bail!("`git {}` in {} failed: {}", args.join(" "), dir.display(), String::from_utf8_lossy(&out.stderr).trim()),
+		_ => Err(miette!("`git {}` in {} failed: {}", args.join(" "), dir.display(), String::from_utf8_lossy(&out.stderr).trim())),
 	}
 }
 
