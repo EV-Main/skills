@@ -2,9 +2,9 @@
 # Symlinks this directory in as the `<name>` skill, for one agent.
 #
 #   ./install.sh claude            → ~/.claude/skills/
-#   ./install.sh codex             → ${CODEX_HOME:-~/.codex}/skills/
+#   ./install.sh agents            → ~/.agents/skills/
 #   ./install.sh claude <project>  → <project>/.claude/skills/
-#   ./install.sh codex  <project>  → <project>/.agents/skills/
+#   ./install.sh agents <project>  → <project>/.agents/skills/
 set -eu
 
 src=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
@@ -13,19 +13,16 @@ tool=${1:-}
 proj=${2:-}
 
 if [ -n "$proj" ]; then
-	proj=$(CDPATH= cd -- "$proj" && pwd)
-	claude_dir="$proj/.claude/skills"
-	codex_dir="$proj/.agents/skills"
+	root=$(CDPATH= cd -- "$proj" && pwd)
 else
-	claude_dir="$HOME/.claude/skills"
-	codex_dir="${CODEX_HOME:-$HOME/.codex}/skills"
+	root=$HOME
 fi
 
 case $tool in
-claude) d=$claude_dir ;;
-codex) d=$codex_dir ;;
+claude) d="$root/.claude/skills" ;;
+agents) d="$root/.agents/skills" ;;
 *)
-	echo "usage: $0 <claude|codex> [project]" >&2
+	echo "usage: $0 <claude|agents> [project]" >&2
 	exit 2
 	;;
 esac
