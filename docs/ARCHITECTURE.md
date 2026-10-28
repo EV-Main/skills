@@ -51,8 +51,8 @@ docs/refs/                third-party skills we take ideas from; never published
 - **A skill's version lives in exactly one place**: `metadata.version` in its `SKILL.md` frontmatter. Every
   other place a version appears (tags, plugin manifests, locks) is derived from it.
 - **A released tag is immutable.** `<name>--v<version>` is the naming Claude Code's plugin dependency resolver
-  reads, so both resolvers see one history. `skargo` refuses a moved or deleted tag it has locked, but only
-  the forge can stop one from moving.
+  reads, so both resolvers see one history. The repo's tag ruleset blocks moving or deleting one; `skargo`
+  refuses a moved or deleted tag it has locked, for repos without one.
 
 Every other rule on skill content (spec-only frontmatter, one `SKILL.md` per skill, links staying inside the
 skill, no content change without a bump, versions only growing) is `skargo check`; Cargo requirement
