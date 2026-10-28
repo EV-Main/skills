@@ -1,1 +1,1 @@
-TODO
+The EV team's agent skills, each versioned on its own, and `skargo`: Cargo-style version requirements, a lockfile, and one install for every agent that reads [Agent Skills](https://agentskills.io/specification) (Claude Code, Codex, Kimi Code, opencode, DeepSeek through any of them).
