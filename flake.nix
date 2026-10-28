@@ -35,6 +35,7 @@
             enable = true;
             lastSupportedVersion = "nightly-${v_flakes.rs.nightly_version}";
             jobs.default = true;
+            jobs.errors.install = { packages = [ "mold" "git" ]; }; # brings nix itself: tests check the home-manager module against the lock
             jobs.warnings.install = { packages = [ "mold" ]; debug = true; };
           };
           readme = v_flakes.readme-fw {
