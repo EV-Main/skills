@@ -1,0 +1,42 @@
+# Validates every skill and, on main, tags each version not yet released as `<name>--v<version>`.
+name: Publish
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+concurrency:
+  group: publish-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          fetch-depth: 0 # `check` diffs against released tags
+      - uses: DeterminateSystems/nix-installer-action@main
+        with:
+          extra-conf: accept-flake-config = true # the flake's cachix substituter
+      - name: Check skills
+        id: check
+        run: |
+          tags=$(nix run . -- check)
+          {
+            echo "tags<<EOF"
+            echo "$tags"
+            echo "EOF"
+          } >> "$GITHUB_OUTPUT"
+          echo "unreleased: ${tags:-none}"
+      - name: Validate Claude marketplace
+        run: npx -y @anthropic-ai/claude-code plugin validate --strict .
+      - name: Tag unreleased versions
+        if: github.event_name == 'push' && steps.check.outputs.tags != ''
+        env:
+          TAGS: ${{ steps.check.outputs.tags }}
+        run: |
+          for t in $TAGS; do git tag "$t" "$GITHUB_SHA"; done
+          git push --atomic origin $(printf 'refs/tags/%s ' $TAGS)
