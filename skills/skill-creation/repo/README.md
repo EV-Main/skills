@@ -1,9 +1,4 @@
----
-name: wrap_for_llm
-description: "Ship an agent-facing skill from inside a repo, so an agent in a *downstream* repo can build against it without reading the tree. Use when asked to write/update a repo's own skill, `docs/skill/`, a SKILL.md for a library or framework, or to make a project consumable by Claude Code / Codex."
----
-
-# wrap_for_llm
+# repo
 
 A repo that others build against ships `docs/skill/` — one `SKILL.md` plus `references/` it links.
 It is a **router, not a summary**: it says which file in the repo answers a given question, and
@@ -15,26 +10,13 @@ Worked example to read before writing a new one:
 The rest of the repo's documentation is unaffected — a skill is a wrapper over docs that already
 exist, never a place to put documentation that belongs next to what it covers.
 
-## One payload, two agents
+## Install
 
-Claude Code and Codex CLI both read a directory whose `SKILL.md` opens with `---`-delimited YAML
-frontmatter carrying `name` and `description`. Neither reads anything the other rejects, so there
-is no per-agent `src/`, no generation step, no packaging. Only the install path differs.
-
-| agent | user scope | project scope |
-|---|---|---|
-| Claude Code | `~/.claude/skills/<name>/` | `<project>/.claude/skills/<name>/` |
-| Codex CLI | `${CODEX_HOME:-~/.codex}/skills/<name>/` | `<project>/.agents/skills/<name>/` |
-
-The installed directory name must equal the frontmatter `name`, which is why the in-repo directory
-is `docs/skill/` but the symlink is not. Codex also accepts a `SKILL.json` whose
-`interface.short_description` supersedes the frontmatter one — forking the payload for one field, so
-do not.
-
-Copy [assets/install.sh](assets/install.sh) to `docs/skill/install.sh`, `chmod +x`, and set `name=`.
-It symlinks rather than copies, so an edit in the repo is live in every scope it was installed to.
-It takes the agent as its first argument and lands in exactly one place — installing into an agent
-that is never run there costs a payload nobody reads and a link nobody updates.
+Installed, the directory is named after the frontmatter `name`, which is why the in-repo directory is
+`docs/skill/` but the link is not. Copy [assets/install.sh](assets/install.sh) to `docs/skill/install.sh`,
+`chmod +x`, and set `name=`. It symlinks rather than copies, so an edit in the repo is live wherever it was
+installed. It lands in one agent directory per call: a payload installed where no agent runs is a link nobody
+updates.
 
 ## Paths resolve against a stated base
 
@@ -78,13 +60,8 @@ In order. Drop any that would be empty rather than padding it.
 
 ## Register
 
-- `description` decides whether the skill ever fires. Enumerate the literal identifiers a consumer
-  types — macro names, trait names, type names — not a topic.
-- Cite ids and paths, never restate prose. A moved path or a deleted `r[…]` id breaks loudly; a
-  paraphrase rots silently.
-- Explain what happens, do not sell it. No `it's X — not Y`, no judgement on the design.
-- Prohibitions carry their mechanism (`a closed gate pulls no deps, so …`). A rule without one gets
-  reasoned around.
+- `description` enumerates the literal identifiers a consumer types — macro names, trait names, type names —
+  not a topic.
 - Reach for `references/` when a section outgrows a screen, not before.
 
 ## Verify
