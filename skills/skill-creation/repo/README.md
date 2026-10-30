@@ -5,7 +5,7 @@ It is a **router, not a summary**: it says which file in the repo answers a give
 supplies only the mechanical shape the prose there leaves implicit.
 
 Worked example to read before writing a new one:
-<https://github.com/EV-invest/trading_data/tree/main/docs/skill>
+<https://github.com/EV-Quant/trading_data/tree/main/docs/skill>
 
 The rest of the repo's documentation is unaffected — a skill is a wrapper over docs that already
 exist, never a place to put documentation that belongs next to what it covers.
