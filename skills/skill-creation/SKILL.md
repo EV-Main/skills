@@ -3,7 +3,7 @@ name: skill-creation
 description: "Write, restructure, test or tune an agent skill (a SKILL.md and the files it links). Covers both a skill a repo ships about itself in `docs/skill/`, so agents in other repos can build against its library or framework, and a standalone skill that is its own source of truth: a workflow from the current conversation, a procedure, a domain. Use when asked to make, update, split, review or eval a skill, fix one that does not trigger, or make a project consumable by Claude Code, Codex, Kimi, opencode or other agents."
 license: "BlueOak-1.0.0; standalone/ is Apache-2.0, see standalone/LICENSE.txt"
 metadata:
-  version: "0.1.0"
+  version: "0.1.1"
 ---
 
 # skill-creation
