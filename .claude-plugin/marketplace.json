@@ -8,10 +8,16 @@
   },
   "plugins": [
     {
+      "name": "excalidraw",
+      "source": "./skills/excalidraw",
+      "description": "Read, study or review an Excalidraw drawing (`.excalidraw`, `.excalidraw.json`, `.excalidraw.md`, excalidraw.com scenes): render it to PNG with a bundled renderer and look at it, cropped and zoomed per section. Use whenever excalidraw is mentioned, or a design board, whiteboard or sketch saved from it has to be understood, summarised, compared to code or redrawn.",
+      "version": "0.1.0"
+    },
+    {
       "name": "skill-creation",
       "source": "./skills/skill-creation",
       "description": "Write, restructure, test or tune an agent skill (a SKILL.md and the files it links). Covers both a skill a repo ships about itself in `docs/skill/`, so agents in other repos can build against its library or framework, and a standalone skill that is its own source of truth: a workflow from the current conversation, a procedure, a domain. Use when asked to make, update, split, review or eval a skill, fix one that does not trigger, or make a project consumable by Claude Code, Codex, Kimi, opencode or other agents.",
-      "version": "0.1.0"
+      "version": "0.1.1"
     }
   ]
 }
