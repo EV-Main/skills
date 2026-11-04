@@ -14,10 +14,46 @@
       "version": "0.1.0"
     },
     {
+      "name": "readme-fw",
+      "source": {
+        "source": "git-subdir",
+        "url": "https://github.com/valeratrades/v_flakes",
+        "path": "readme_fw/skill",
+        "ref": "readme-fw--v0.1.0",
+        "sha": "d0da280f48a73ce6678c1a318941eff59cff561e"
+      },
+      "description": "How a repo's README.md is produced from docs/.readme_assets/. Read before editing any README.md or any file under docs/.readme_assets/ in a repo that consumes v_flakes' readme-fw.",
+      "version": "0.1.0"
+    },
+    {
       "name": "skill-creation",
       "source": "./skills/skill-creation",
       "description": "Write, restructure, test or tune an agent skill (a SKILL.md and the files it links). Covers both a skill a repo ships about itself in `docs/skill/`, so agents in other repos can build against its library or framework, and a standalone skill that is its own source of truth: a workflow from the current conversation, a procedure, a domain. Use when asked to make, update, split, review or eval a skill, fix one that does not trigger, or make a project consumable by Claude Code, Codex, Kimi, opencode or other agents.",
-      "version": "0.1.1"
+      "version": "0.2.0"
+    },
+    {
+      "name": "trading-data",
+      "source": {
+        "source": "git-subdir",
+        "url": "https://github.com/EV-Quant/trading_data",
+        "path": "docs/skill",
+        "ref": "trading-data--v0.1.0",
+        "sha": "6bb78f9e1cbbbd7120ada6bf3e9c336b98d311b1"
+      },
+      "description": "Author and wire derivation graphs with the `trading_data` Rust framework — writing `#[node]` cells, spelling `type Deps`, declaring `graph!`, and driving it off `Replay` or `Live`. Use whenever a crate depends on `trading_data`, or a task mentions its primitives — `#[node]`, `graph!`, `Cell`, `Buffering`/`Folding`/`Sampling`/`Gating`, `Scans`/`Closes`/`Folds`/`Runs`/`Symbolic`/`Decides`/`Blind`, `Lanes`, `ReadClock`, `Replay`/`Live`.",
+      "version": "0.1.0"
+    },
+    {
+      "name": "v-flakes",
+      "source": {
+        "source": "git-subdir",
+        "url": "https://github.com/valeratrades/v_flakes",
+        "path": "docs/skill",
+        "ref": "v-flakes--v0.1.0",
+        "sha": "d0da280f48a73ce6678c1a318941eff59cff561e"
+      },
+      "description": "Rules for working in ~/s/v_flakes (the shared Nix parts collection consumed by every other repo via `v_flakes.url = github:valeratrades/v_flakes?ref=v1.6`). Read BEFORE editing anything under ~/s/v_flakes, and before changing how any repo consumes v_flakes — covers how to release, what the pin policy is, and what re-exports exist. Also read before creating or labelling a GitHub issue in any v_flakes consumer: the label set and its lint come from here. Also read before editing any Cargo.toml: how a crate depends on another repo we own (local path overrides) is set here.",
+      "version": "0.1.0"
     }
   ]
 }

@@ -37,6 +37,7 @@
             jobs.default = true;
             jobs.errors.install = { packages = [ "mold" "git" ]; }; # brings nix itself: tests check the home-manager module against the lock
             jobs.warnings.install = { packages = [ "mold" ]; debug = true; };
+            skills.skargo = ".";
           };
           readme = v_flakes.readme-fw {
             inherit pkgs pname;

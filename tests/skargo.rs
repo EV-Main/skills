@@ -10,6 +10,9 @@ use std::{
 
 use tempfile::TempDir;
 
+/// Keeps tests off the real registry: a lookup there fails instead of reaching GitHub.
+const NO_REGISTRY: &str = "file:///nonexistent-skargo-registry";
+
 /// What goes wrong, how to break a repo that way, what the error must say.
 type Case = (&'static str, fn(&Repo), &'static str);
 
@@ -135,9 +138,6 @@ impl Machine {
 		})
 	}
 }
-
-/// Keeps tests off the real registry: a lookup there fails instead of reaching GitHub.
-const NO_REGISTRY: &str = "file:///nonexistent-skargo-registry";
 
 fn skargo(cwd: &Path, args: &[&str], configure: impl FnOnce(&mut Command)) -> Output {
 	let mut c = isolated(Command::new(env!("CARGO_BIN_EXE_skargo")));

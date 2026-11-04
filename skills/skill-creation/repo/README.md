@@ -13,10 +13,12 @@ exist, never a place to put documentation that belongs next to what it covers.
 ## Install
 
 Installed, the directory is named after the frontmatter `name`, which is why the in-repo directory is
-`docs/skill/` but the link is not. Copy [assets/install.sh](assets/install.sh) to `docs/skill/install.sh`,
-`chmod +x`, and set `name=`. It symlinks rather than copies, so an edit in the repo is live wherever it was
-installed. It lands in one agent directory per call: a payload installed where no agent runs is a link nobody
-updates.
+`docs/skill/` but the link is not. It releases like any skill: `metadata.version` in the frontmatter, and
+`skills = { };` in the repo's v_flakes `github { … }`, whose CI tags `<name>--v<version>` on main. A
+`<name> = { git, version }` line in the registry's
+[`skargo.toml`](https://github.com/EV-Main/skills/blob/main/skargo.toml) then lets consumers write
+`<name> = "<req>"`. Whoever edits the skill links their checkout instead, live:
+`<name> = { path = "<checkout>/docs/skill" }`.
 
 ## Paths resolve against a stated base
 
@@ -66,10 +68,7 @@ In order. Drop any that would be empty rather than padding it.
 
 ## Verify
 
-```sh
-docs/skill/install.sh claude ../scratch-consumer
-```
-
-Then, in a repo that has never seen the source tree: ask for the task the skill exists for. What the
+With the `path` requirement above installed (`skargo install`), open a repo that has never seen the source
+tree and ask for the task the skill exists for. What the
 agent gets wrong is what the skill owes, and every path it fails to resolve is a base that was
 stated wrong.
