@@ -94,7 +94,7 @@ pub(crate) fn install(locked: &[Locked]) -> Result<()> {
 /// Unpacks next to `dest` and renames, so a present `dest` is always complete.
 fn materialize(r: &Release, store: &Path, dest: &Path) -> Result<()> {
 	let tag = git::tag(&r.name, &r.version);
-	let fetched = git::Fetched::new(&r.git, &format!("refs/tags/{tag}"))?;
+	let fetched = git::Fetched::try_new(&r.git, &format!("refs/tags/{tag}"))?;
 	if fetched.commit != r.commit {
 		bail!("tag {tag} in {} now points at {}, locked at {}; released tags are immutable", r.git, fetched.commit, r.commit);
 	}

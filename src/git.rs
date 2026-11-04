@@ -73,7 +73,7 @@ pub(crate) struct Fetched {
 
 impl Fetched {
 	/// By ref, not by sha: fetching an arbitrary sha needs server opt-in on some transports.
-	pub(crate) fn new(url: &str, refname: &str) -> Result<Self> {
+	pub(crate) fn try_new(url: &str, refname: &str) -> Result<Self> {
 		let repo = tempfile::tempdir().into_diagnostic()?;
 		bytes(repo.path(), &["init", "-q", "--bare"])?;
 		bytes(repo.path(), &["fetch", "-q", "--depth", "1", url, refname])?;
