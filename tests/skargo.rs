@@ -103,9 +103,21 @@ impl Machine {
 		fs::read_to_string(self.work().join("skargo.lock")).unwrap()
 	}
 
-	fn locked(&self, name: &str) -> (String, String, String) {
+	fn entry(&self, name: &str) -> toml::Table {
 		let lock: toml::Table = self.lock_text().parse().unwrap();
-		let entry = lock["skill"].as_array().unwrap().iter().find(|e| e["name"].as_str() == Some(name)).unwrap();
+		lock["skill"]
+			.as_array()
+			.unwrap()
+			.iter()
+			.find(|e| e["name"].as_str() == Some(name))
+			.unwrap()
+			.as_table()
+			.unwrap()
+			.clone()
+	}
+
+	fn locked(&self, name: &str) -> (String, String, String) {
+		let entry = self.entry(name);
 		(
 			entry["version"].as_str().unwrap().to_owned(),
 			entry["commit"].as_str().unwrap().to_owned(),
@@ -114,15 +126,22 @@ impl Machine {
 	}
 
 	fn run(&self, args: &[&str]) -> Output {
+		self.run_against(NO_REGISTRY, args)
+	}
+
+	fn run_against(&self, registry: &str, args: &[&str]) -> Output {
 		skargo(&self.work(), args, |c| {
-			c.env("HOME", self.home()).env("XDG_DATA_HOME", self.0.path().join("data"));
+			c.env("HOME", self.home()).env("XDG_DATA_HOME", self.0.path().join("data")).env("SKARGO_REGISTRY", registry);
 		})
 	}
 }
 
+/// Keeps tests off the real registry: a lookup there fails instead of reaching GitHub.
+const NO_REGISTRY: &str = "file:///nonexistent-skargo-registry";
+
 fn skargo(cwd: &Path, args: &[&str], configure: impl FnOnce(&mut Command)) -> Output {
 	let mut c = isolated(Command::new(env!("CARGO_BIN_EXE_skargo")));
-	c.current_dir(cwd).args(args).env("NO_COLOR", "1");
+	c.current_dir(cwd).args(args).env("NO_COLOR", "1").env("SKARGO_REGISTRY", NO_REGISTRY);
 	configure(&mut c);
 	c.output().unwrap()
 }
@@ -264,6 +283,80 @@ fn lock_derives_the_skill_path_from_its_name() {
 		assert!(!out.status.success(), "{what}: lock should fail");
 		fails_with(out, fragment);
 	}
+}
+
+#[test]
+fn shorthand_takes_its_git_from_the_registry() {
+	let app = Repo::new();
+	app.release("docs/skill", "ext", "0.1.0");
+	let registry = Repo::new();
+	registry.release("skills/own", "own", "0.1.0");
+	registry.write("skargo.toml", &format!("ext = {{ git = \"{}\", version = \"0.1\" }}\n", app.url()));
+	registry.commit();
+
+	let m = Machine::new();
+	m.manifest("own = \"0.1\"\next = \"0.1\"\nnope = \"1\"\n");
+	fails_with(m.run_against(&registry.url(), &["lock"]), "nope is not in the registry");
+	fails_with(m.run_against(&registry.url(), &["lock"]), "it has: [ext, own]");
+
+	m.manifest("own = \"0.1\"\next = \"0.1\"\n");
+	ok(m.run_against(&registry.url(), &["lock"]));
+	assert_eq!(m.entry("own")["git"].as_str(), Some(registry.url().as_str()), "a skill tagged in the registry itself");
+	assert_eq!(m.entry("ext")["git"].as_str(), Some(app.url().as_str()), "a skill the registry's manifest points at");
+	assert_eq!(m.locked("ext").2, "docs/skill");
+
+	let first = m.lock_text();
+	ok(m.run_against(NO_REGISTRY, &["lock"]));
+	assert_eq!(m.lock_text(), first, "existing pins never consult the registry");
+}
+
+#[test]
+fn update_re_resolves_the_named_pins() {
+	let repo = Repo::new();
+	repo.release("skills/foo", "foo", "1.0.0");
+	repo.release("skills/bar", "bar", "1.0.0");
+	let m = Machine::new();
+	m.manifest(&format!("foo = {{ git = \"{0}\", version = \"1\" }}\nbar = {{ git = \"{0}\", version = \"1\" }}\n", repo.url()));
+	ok(m.run(&["lock"]));
+	let foo = repo.release("skills/foo", "foo", "1.1.0");
+	let bar = repo.release("skills/bar", "bar", "1.1.0");
+
+	ok(m.run(&["update", "foo"]));
+	assert_eq!((m.locked("foo").1, m.locked("bar").0), (foo, "1.0.0".to_owned()), "only the named pin moves");
+	ok(m.run(&["update"]));
+	assert_eq!(m.locked("bar").1, bar, "no names moves every pin");
+	fails_with(m.run(&["update", "baz"]), "baz is not in");
+}
+
+#[test]
+fn path_requirement_links_a_live_checkout() {
+	let repo = Repo::new();
+	repo.release("skills/foo", "foo", "1.0.0");
+	let m = Machine::new();
+	let checkout = m.0.path().join("checkout/docs/skill");
+	fs::create_dir_all(&checkout).unwrap();
+	fs::write(checkout.join("SKILL.md"), skill_md("foo", "0.0.1")).unwrap();
+
+	m.manifest("foo = { path = \"../checkout/docs/skill\" }\n");
+	ok(m.run(&["install"]));
+	assert_eq!(m.entry("foo")["path"].as_str(), Some(checkout.canonicalize().unwrap().to_str().unwrap()), "locked absolute");
+	fs::write(checkout.join("SKILL.md"), skill_md("foo", "0.0.2")).unwrap();
+	for agent_dir in [".claude/skills", ".agents/skills"] {
+		assert_eq!(
+			fs::read_to_string(m.home().join(agent_dir).join("foo/SKILL.md")).unwrap(),
+			skill_md("foo", "0.0.2"),
+			"edits are live"
+		);
+	}
+
+	m.manifest(&format!("foo = {{ git = \"{}\", version = \"1\" }}\n", repo.url()));
+	ok(m.run(&["install"]));
+	assert_eq!(fs::read_to_string(m.home().join(".claude/skills/foo/SKILL.md")).unwrap(), skill_md("foo", "1.0.0"));
+	assert_eq!(fs::read_dir(m.store()).unwrap().count(), 1, "the path entry is collected");
+	assert!(checkout.join("SKILL.md").exists(), "collecting the entry leaves the checkout alone");
+
+	m.manifest("bar = { path = \"../checkout/docs/skill\" }\n");
+	fails_with(m.run(&["lock"]), "calls it \"bar\"");
 }
 
 #[test]
@@ -425,6 +518,58 @@ fn check_reports_each_violation() {
 	}
 }
 
+#[test]
+fn check_lists_required_skills_in_the_marketplace() {
+	let app = Repo::new();
+	let commit = app.release("docs/skill", "ext", "0.1.0");
+	app.release("docs/other", "a", "0.1.0");
+	let repo = clean_source();
+	repo.write("skargo.toml", &format!("ext = {{ git = \"{}\", version = \"0.1\" }}\n", app.url()));
+	repo.commit();
+
+	fails_with(check(&repo), "skargo.lock was stale");
+	let marketplace: serde_json::Value = serde_json::from_str(&fs::read_to_string(repo.path().join(".claude-plugin/marketplace.json")).unwrap()).unwrap();
+	assert_eq!(
+		marketplace["plugins"][1],
+		serde_json::json!({
+			"name": "ext",
+			"source": { "source": "git-subdir", "url": app.url(), "path": "docs/skill", "ref": "ext--v0.1.0", "sha": commit },
+			"description": "test skill ext",
+			"version": "0.1.0",
+		})
+	);
+	repo.commit();
+	ok(check(&repo));
+
+	fs::remove_file(repo.path().join("skargo.lock")).unwrap();
+	fails_with(check(&repo), "skargo.lock was stale");
+	repo.commit();
+
+	repo.write(
+		"skargo.toml",
+		&format!("ext = {{ git = \"{0}\", version = \"0.1\" }}\na = {{ git = \"{0}\", version = \"0.1\" }}\n", app.url()),
+	);
+	fails_with(check(&repo), "\"a\" is both a skill here and a requirement");
+}
+
+#[test]
+fn publish_tags_head_and_pushes() {
+	let origin = tempfile::tempdir().unwrap();
+	git(origin.path(), &["init", "-q", "--bare"]);
+	let repo = clean_source();
+	git(repo.path(), &["remote", "add", "origin", origin.path().to_str().unwrap()]);
+	let publish = || skargo(repo.path(), &["publish"], |_| {});
+
+	repo.write("skills/a/references/r.md", "uncommitted\n");
+	fails_with(publish(), "uncommitted changes");
+	assert_eq!(git(origin.path(), &["tag"]), "", "nothing pushed from a dirty tree");
+
+	let head = repo.commit();
+	assert_eq!(ok(publish()), "a--v0.1.0\n");
+	assert_eq!(git(origin.path(), &["rev-parse", "a--v0.1.0^{commit}"]), head);
+	assert_eq!(ok(publish()), "", "nothing left to release");
+}
+
 /// The lock is the contract between the CLI and the home-manager module.
 #[test]
 fn home_manager_module_links_what_the_lock_pins() {
@@ -432,7 +577,13 @@ fn home_manager_module_links_what_the_lock_pins() {
 	repo.release("skills/foo", "foo", "1.0.0");
 	repo.release("docs/skill", "bar", "0.2.0");
 	let m = Machine::new();
-	m.manifest(&format!("foo = {{ git = \"{0}\", version = \"1\" }}\nbar = {{ git = \"{0}\", version = \"0.2\" }}\n", repo.url()));
+	let checkout = m.0.path().join("checkout");
+	fs::create_dir_all(&checkout).unwrap();
+	fs::write(checkout.join("SKILL.md"), skill_md("live", "0.0.1")).unwrap();
+	m.manifest(&format!(
+		"foo = {{ git = \"{0}\", version = \"1\" }}\nbar = {{ git = \"{0}\", version = \"0.2\" }}\nlive = {{ path = \"../checkout\" }}\n",
+		repo.url()
+	));
 	ok(m.run(&["lock"]));
 
 	let root = env!("CARGO_MANIFEST_DIR");
@@ -443,6 +594,8 @@ fn home_manager_module_links_what_the_lock_pins() {
 			stub = {{ lib, ... }}: {{
 				options.home.file = lib.mkOption {{ type = lib.types.attrsOf lib.types.anything; }};
 				options.home.packages = lib.mkOption {{ type = lib.types.listOf lib.types.anything; }};
+				options.lib = lib.mkOption {{ type = lib.types.attrsOf lib.types.anything; }};
+				config.lib.file.mkOutOfStoreSymlink = path: "out-of-store:${{path}}";
 			}};
 			eval = lib.evalModules {{
 				modules = [
@@ -461,7 +614,19 @@ fn home_manager_module_links_what_the_lock_pins() {
 	let files: BTreeMap<String, String> = serde_json::from_slice(&out.stdout).unwrap();
 	assert_eq!(
 		files.keys().map(String::as_str).collect::<Vec<_>>(),
-		[".agents/skills/bar", ".agents/skills/foo", ".claude/skills/bar", ".claude/skills/foo"]
+		[
+			".agents/skills/bar",
+			".agents/skills/foo",
+			".agents/skills/live",
+			".claude/skills/bar",
+			".claude/skills/foo",
+			".claude/skills/live"
+		]
+	);
+	assert_eq!(
+		files[".claude/skills/live"],
+		format!("out-of-store:{}", checkout.canonicalize().unwrap().display()),
+		"a live link, not a store copy"
 	);
 	assert_eq!(fs::read_to_string(Path::new(&files[".claude/skills/foo"]).join("SKILL.md")).unwrap(), skill_md("foo", "1.0.0"));
 	assert_eq!(fs::read_to_string(Path::new(&files[".agents/skills/bar"]).join("SKILL.md")).unwrap(), skill_md("bar", "0.2.0"));

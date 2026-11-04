@@ -7,7 +7,10 @@ use std::{
 
 use miette::{IntoDiagnostic, Result, WrapErr, bail, miette};
 
-use crate::{git, lock::Locked};
+use crate::{
+	git,
+	lock::{Locked, Release},
+};
 
 /// `~/.claude/skills`: Claude Code (and DeepSeek through it), opencode. `~/.agents/skills`: Codex, Kimi Code, opencode, gh skill.
 const AGENT_DIRS: [&str; 2] = [".claude/skills", ".agents/skills"];
@@ -19,13 +22,18 @@ pub(crate) fn install(locked: &[Locked]) -> Result<()> {
 		None => home.join(".local/share"),
 	}
 	.join("skargo");
-	let entry = |l: &Locked| store.join(format!("{}-{}", l.commit, l.name));
+	let entry = |l: &Locked| {
+		store.join(match l {
+			Locked::Release(r) => format!("{}-{}", r.commit, r.name),
+			Locked::Path(p) => format!("path-{}", p.name),
+		})
+	};
 	let ours = |link: &Path| fs::read_link(link).is_ok_and(|target| target.starts_with(&store));
 	let targets: Vec<PathBuf> = AGENT_DIRS.iter().map(|d| home.join(d)).collect();
 
 	let foreign: Vec<String> = targets
 		.iter()
-		.flat_map(|t| locked.iter().map(move |l| t.join(&l.name)))
+		.flat_map(|t| locked.iter().map(move |l| t.join(l.name())))
 		.filter(|link| link.symlink_metadata().is_ok() && !ours(link))
 		.map(|link| link.display().to_string())
 		.collect();
@@ -36,15 +44,25 @@ pub(crate) fn install(locked: &[Locked]) -> Result<()> {
 	fs::create_dir_all(&store).into_diagnostic().wrap_err_with(|| format!("creating {}", store.display()))?;
 	for l in locked {
 		let dest = entry(l);
-		if !dest.exists() {
-			materialize(l, &store, &dest)?;
+		match l {
+			Locked::Release(r) =>
+				if !dest.exists() {
+					materialize(r, &store, &dest)?;
+				},
+			Locked::Path(p) =>
+				if !fs::read_link(&dest).is_ok_and(|t| t == p.path) {
+					if dest.symlink_metadata().is_ok() {
+						fs::remove_file(&dest).into_diagnostic().wrap_err_with(|| format!("replacing {}", dest.display()))?;
+					}
+					symlink(&p.path, &dest).into_diagnostic().wrap_err_with(|| format!("linking {}", dest.display()))?;
+				},
 		}
 	}
 
 	for target in &targets {
 		fs::create_dir_all(target).into_diagnostic().wrap_err_with(|| format!("creating {}", target.display()))?;
 		for l in locked {
-			let link = target.join(&l.name);
+			let link = target.join(l.name());
 			if fs::read_link(&link).is_ok_and(|t| t == entry(l)) {
 				continue;
 			}
@@ -53,7 +71,7 @@ pub(crate) fn install(locked: &[Locked]) -> Result<()> {
 			}
 			symlink(entry(l), &link).into_diagnostic().wrap_err_with(|| format!("linking {}", link.display()))?;
 		}
-		let wanted: HashSet<&str> = locked.iter().map(|l| l.name.as_str()).collect();
+		let wanted: HashSet<&str> = locked.iter().map(Locked::name).collect();
 		for existing in fs::read_dir(target).into_diagnostic()? {
 			let path = existing.into_diagnostic()?.path();
 			let name = path.file_name().expect("read_dir entries have names").to_string_lossy();
@@ -67,29 +85,24 @@ pub(crate) fn install(locked: &[Locked]) -> Result<()> {
 	for existing in fs::read_dir(&store).into_diagnostic()? {
 		let path = existing.into_diagnostic()?.path();
 		if !referenced.contains(&path) {
-			fs::remove_dir_all(&path).into_diagnostic().wrap_err_with(|| format!("removing {}", path.display()))?;
+			fs::remove_dir_all(&path).into_diagnostic().wrap_err_with(|| format!("removing {}", path.display()))?; // removes a `path` entry's symlink, not what it points at
 		}
 	}
 	Ok(())
 }
 
 /// Unpacks next to `dest` and renames, so a present `dest` is always complete.
-fn materialize(l: &Locked, store: &Path, dest: &Path) -> Result<()> {
-	let fetched = git::Fetched::tag(&l.git, &git::tag(&l.name, &l.version))?;
-	if fetched.commit != l.commit {
-		bail!(
-			"tag {} in {} now points at {}, locked at {}; released tags are immutable",
-			git::tag(&l.name, &l.version),
-			l.git,
-			fetched.commit,
-			l.commit
-		);
+fn materialize(r: &Release, store: &Path, dest: &Path) -> Result<()> {
+	let tag = git::tag(&r.name, &r.version);
+	let fetched = git::Fetched::new(&r.git, &format!("refs/tags/{tag}"))?;
+	if fetched.commit != r.commit {
+		bail!("tag {tag} in {} now points at {}, locked at {}; released tags are immutable", r.git, fetched.commit, r.commit);
 	}
-	let archive = git::bytes(fetched.path(), &["archive", "--format=tar", &format!("{}:{}", l.commit, l.path)])?;
+	let archive = git::bytes(fetched.path(), &["archive", "--format=tar", &format!("{}:{}", r.commit, r.path)])?;
 	let staging = tempfile::tempdir_in(store).into_diagnostic()?;
 	tar::Archive::new(archive.as_slice())
 		.unpack(staging.path())
 		.into_diagnostic()
-		.wrap_err_with(|| format!("unpacking {}", l.name))?;
-	fs::rename(staging.keep(), dest).into_diagnostic().wrap_err_with(|| format!("moving {} into the store", l.name))
+		.wrap_err_with(|| format!("unpacking {}", r.name))?;
+	fs::rename(staging.keep(), dest).into_diagnostic().wrap_err_with(|| format!("moving {} into the store", r.name))
 }

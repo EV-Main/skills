@@ -4,12 +4,13 @@
 let
   cfg = config.programs.skargo;
   skills = (builtins.fromTOML (builtins.readFile cfg.lockFile)).skill;
-  source = s: "${builtins.fetchGit {
+  source = s:
+    if s ? git then "${builtins.fetchGit {
     url = s.git;
     ref = "refs/tags/${s.name}--v${s.version}";
     rev = s.commit;
     shallow = true;
-  }}/${s.path}";
+  }}/${s.path}" else config.lib.file.mkOutOfStoreSymlink s.path;
 in
 {
   options.programs.skargo = {

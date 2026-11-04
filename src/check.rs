@@ -9,7 +9,10 @@ use pulldown_cmark::{Event, Parser, Tag};
 use semver::Version;
 use serde_json::{Value, json};
 
-use crate::{frontmatter, git};
+use crate::{
+	frontmatter, git,
+	lock::{self, LOCK, Locked, MANIFEST, Refresh},
+};
 
 const MARKETPLACE: &str = ".claude-plugin/marketplace.json";
 
@@ -32,7 +35,11 @@ enum Violation {
 	#[error("tag {0} is not <name>--v<semver>")]
 	MalformedTag(String),
 	#[error("{0} was stale and has been rewritten; stage it")]
-	StaleMarketplace(String),
+	Stale(&'static str),
+	#[error("{0:?} is both a skill here and a requirement in {MANIFEST}")]
+	RequiredAndLocal(String),
+	#[error("{0} is a `path` requirement; {MARKETPLACE} can only list releases")]
+	PathInMarketplace(String),
 }
 
 struct Skill {
@@ -43,9 +50,35 @@ struct Skill {
 	version: Version,
 }
 
+fn root() -> Result<PathBuf> {
+	Ok(PathBuf::from(git::text(Path::new("."), &["rev-parse", "--show-toplevel"])?.trim()))
+}
+
+/// Tags HEAD with what `check` reports unreleased, all or none.
+pub(crate) fn publish() -> Result<()> {
+	let root = root()?;
+	if !git::holds(&root, &["diff", "--quiet", "HEAD", "--"])? {
+		miette::bail!("uncommitted changes: `check` reads the working tree, the tags would name HEAD");
+	}
+	let tags = check()?;
+	if tags.is_empty() {
+		return Ok(());
+	}
+	let head = git::text(&root, &["rev-parse", "HEAD"])?.trim().to_owned();
+	let refspecs: Vec<String> = tags.iter().map(|t| format!("{head}:refs/tags/{t}")).collect();
+	let mut push = vec!["push", "--atomic", "origin"];
+	push.extend(refspecs.iter().map(String::as_str));
+	git::bytes(&root, &push)?;
+	for t in &tags {
+		git::bytes(&root, &["tag", t, &head])?; // after the push, so a failed one leaves no local tag hiding the release from the next `check`
+		println!("{t}");
+	}
+	Ok(())
+}
+
 /// Validates every tracked skill of the repo around the cwd; returns the tags its versions still need.
 pub(crate) fn check() -> Result<Vec<String>> {
-	let root = PathBuf::from(git::text(Path::new("."), &["rev-parse", "--show-toplevel"])?.trim());
+	let root = root()?;
 	let mut violations = Vec::new();
 
 	let mut tracked = BTreeSet::new();
@@ -139,6 +172,25 @@ pub(crate) fn check() -> Result<Vec<String>> {
 		}
 	}
 
+	let mut required = Vec::new();
+	if root.join(MANIFEST).exists() {
+		let read_lock = || match fs::read_to_string(root.join(LOCK)) {
+			Ok(s) => Ok(Some(s)),
+			Err(e) if e.kind() == std::io::ErrorKind::NotFound => Ok(None),
+			Err(e) => Err(e).into_diagnostic().wrap_err_with(|| format!("reading {LOCK}")),
+		};
+		let before = read_lock()?;
+		required = lock::sync(&root, Refresh::None)?;
+		if read_lock()? != before {
+			violations.push(Violation::Stale(LOCK));
+		}
+		for l in &required {
+			if by_name.contains_key(l.name()) {
+				violations.push(Violation::RequiredAndLocal(l.name().to_owned()));
+			}
+		}
+	}
+
 	let marketplace = root.join(MARKETPLACE);
 	if marketplace.exists() {
 		let current = fs::read_to_string(&marketplace).into_diagnostic().wrap_err_with(|| format!("reading {MARKETPLACE}"))?;
@@ -146,23 +198,51 @@ pub(crate) fn check() -> Result<Vec<String>> {
 		let Some(top) = manifest.as_object_mut() else {
 			miette::bail!("{MARKETPLACE} is not a JSON object");
 		};
-		skills.sort_by(|a, b| a.name.cmp(&b.name));
-		let plugins = skills
+		let mut plugins: Vec<(String, Value)> = skills
 			.iter()
 			.map(|s| {
-				json!({
-					"name": s.name,
-					"source": if s.dir.is_empty() { "./".to_owned() } else { format!("./{}", s.dir) },
-					"description": s.description,
-					"version": s.version.to_string(),
-				})
+				(
+					s.name.clone(),
+					json!({
+						"name": s.name,
+						"source": if s.dir.is_empty() { "./".to_owned() } else { format!("./{}", s.dir) },
+						"description": s.description,
+						"version": s.version.to_string(),
+					}),
+				)
 			})
 			.collect();
-		top.insert("plugins".to_owned(), Value::Array(plugins));
+		for l in &required {
+			let r = match l {
+				Locked::Release(r) => r,
+				Locked::Path(p) => {
+					violations.push(Violation::PathInMarketplace(p.name.clone()));
+					continue;
+				}
+			};
+			let (_, fm) = lock::resolve(&r.name, &r.git, &r.version, &r.commit)?;
+			let tag = git::tag(&r.name, &r.version);
+			let source = if r.path.is_empty() {
+				json!({ "source": "url", "url": r.git, "ref": tag, "sha": r.commit })
+			} else {
+				json!({ "source": "git-subdir", "url": r.git, "path": r.path, "ref": tag, "sha": r.commit })
+			};
+			plugins.push((
+				r.name.clone(),
+				json!({
+					"name": r.name,
+					"source": source,
+					"description": fm.description,
+					"version": r.version.to_string(),
+				}),
+			));
+		}
+		plugins.sort_by(|a, b| a.0.cmp(&b.0));
+		top.insert("plugins".to_owned(), Value::Array(plugins.into_iter().map(|(_, p)| p).collect()));
 		let rendered = format!("{}\n", serde_json::to_string_pretty(&manifest).expect("a Value always serializes"));
 		if rendered != current {
 			fs::write(&marketplace, rendered).into_diagnostic().wrap_err_with(|| format!("writing {MARKETPLACE}"))?;
-			violations.push(Violation::StaleMarketplace(MARKETPLACE.to_owned()));
+			violations.push(Violation::Stale(MARKETPLACE));
 		}
 	}
 
