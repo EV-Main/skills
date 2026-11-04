@@ -65,18 +65,18 @@ pub(crate) fn remote_releases(url: &str) -> Result<BTreeMap<String, BTreeMap<Str
 	Ok(releases)
 }
 
-/// A throwaway bare repo holding one tag, fetched at depth 1.
+/// A throwaway bare repo holding one ref, fetched at depth 1.
 pub(crate) struct Fetched {
 	repo: TempDir,
 	pub(crate) commit: String,
 }
 
 impl Fetched {
-	/// By tag, not by sha: fetching an arbitrary sha needs server opt-in on some transports.
-	pub(crate) fn tag(url: &str, tag: &str) -> Result<Self> {
+	/// By ref, not by sha: fetching an arbitrary sha needs server opt-in on some transports.
+	pub(crate) fn new(url: &str, refname: &str) -> Result<Self> {
 		let repo = tempfile::tempdir().into_diagnostic()?;
 		bytes(repo.path(), &["init", "-q", "--bare"])?;
-		bytes(repo.path(), &["fetch", "-q", "--depth", "1", url, &format!("refs/tags/{tag}")])?;
+		bytes(repo.path(), &["fetch", "-q", "--depth", "1", url, refname])?;
 		let commit = text(repo.path(), &["rev-parse", "FETCH_HEAD^{commit}"])?.trim().to_owned();
 		Ok(Self { repo, commit })
 	}

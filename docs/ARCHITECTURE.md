@@ -36,13 +36,18 @@ docs/refs/                third-party skills we take ideas from; never published
 
 ## Codemap
 
-`skargo`, the binary at the repo root: `check` for this (or any) skill repo, `lock`/`install` for consumers.
+`skargo`, the binary at the repo root: `check`/`publish` for this (or any) skill repo, `lock`/`update`/`install`
+for consumers.
 
 - `src/check.rs`: validates every tracked `SKILL.md`, lists unreleased tags, owns the `plugins` array of
-  `.claude-plugin/marketplace.json` (the rest of that file is hand-written).
-- `src/lock.rs`: `skargo.toml` (`name = { git, version }`) → `skargo.lock` (`name · git · path · version · commit`).
-  The skill's path in its repo is derived from the frontmatter `name` at the resolved tag.
-- `src/install.rs`: store in `$XDG_DATA_HOME/skargo`, directory symlinks from both agent dirs; touches only its own links.
+  `.claude-plugin/marketplace.json` (the rest of that file is hand-written). A repo with a `skargo.toml` also
+  gets its lock synced, and its marketplace lists each locked release as a `git-subdir` source. `publish`
+  pushes what `check` lists, as tags on HEAD.
+- `src/lock.rs`: `skargo.toml` → `skargo.lock`. A requirement is `"<req>"` (git looked up in the registry:
+  its own tags, then its `skargo.toml`), `{ git, version }`, or `{ path }` (a live link, locked absolute).
+  A release's path in its repo is derived from the frontmatter `name` at the resolved tag.
+- `src/install.rs`: store in `$XDG_DATA_HOME/skargo`, directory symlinks from both agent dirs; touches only its
+  own links. A `path` skill's store entry is a symlink to its checkout.
 - `nix/home-manager.nix`: `homeManagerModules.default`, the same layout as `install`, built from a lock.
 - `.github/workflows/publish.yml`: `check` on PRs; on main, also tags what `check` reports unreleased.
 
