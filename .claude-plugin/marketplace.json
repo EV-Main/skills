@@ -32,6 +32,12 @@
       "version": "0.2.0"
     },
     {
+      "name": "tracey",
+      "source": "./skills/tracey",
+      "description": "Add proper Tracey spec annotations to code, find requirements, and check coverage. Use when working with projects that have Tracey configuration (.config/tracey/config.styx), when adding spec references to code, or when checking requirement coverage.",
+      "version": "0.1.0"
+    },
+    {
       "name": "trading-data",
       "source": {
         "source": "git-subdir",
