@@ -228,7 +228,7 @@ fn registry_git(name: &str, registry: &str, remotes: &mut HashMap<String, Releas
 	let listed = registry_manifest.as_ref().expect("filled above");
 	match listed.get(name) {
 		Some(Requirement::Git(g)) => Ok(g.git.clone()),
-		Some(_) => bail!("{registry} {MANIFEST} lists {name} without a `git`"),
+		Some(_) => Err(miette!("{registry} {MANIFEST} lists {name} without a `git`")),
 		None => {
 			let mut known: Vec<&str> = remotes[registry].keys().chain(listed.keys()).map(String::as_str).collect();
 			known.sort_unstable();
