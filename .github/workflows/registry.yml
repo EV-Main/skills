@@ -21,13 +21,17 @@ jobs:
       - uses: DeterminateSystems/nix-installer-action@main
         with:
           extra-conf: accept-flake-config = true # the flake's cachix substituter
-      - run: nix run . -- update
+      - name: Build skargo
+        run: | # not `nix run`: inside this checkout, apps.default is `cargo run` on the runner's toolchain
+          out=$(nix build --no-link --print-out-paths .)
+          echo "skargo=$out/bin/skargo" >> "$GITHUB_ENV"
+      - run: $skargo update
       - name: Regenerate the marketplace
-        run: nix run . -- check || echo "rewritten; the next step is the verdict" # a moved pin leaves the marketplace stale, which fails this run
+        run: $skargo check || echo "rewritten; the next step is the verdict" # a moved pin leaves the marketplace stale, which fails this run
       - name: Check
         run: |
           git add skargo.lock .claude-plugin/marketplace.json
-          nix run . -- check
+          $skargo check
       - name: Commit
         run: |
           git diff --cached --quiet && exit 0
