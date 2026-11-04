@@ -1,0 +1,3 @@
+readme-fw = { git = "https://github.com/valeratrades/v_flakes", version = "0.1" }
+trading-data = { git = "https://github.com/EV-Quant/trading_data", version = "0.1" }
+v-flakes = { git = "https://github.com/valeratrades/v_flakes", version = "0.1" }
