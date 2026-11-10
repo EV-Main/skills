@@ -33,6 +33,7 @@
           github = v_flakes.github {
             inherit pkgs pname rs;
             enable = true;
+            publishCachix = "valeratrades";
             lastSupportedVersion = "nightly-${v_flakes.rs.nightly_version}";
             jobs.default = true;
             jobs.errors.install = { packages = [ "mold" "git" ]; }; # brings nix itself: tests check the home-manager module against the lock
