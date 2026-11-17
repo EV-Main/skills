@@ -8,6 +8,12 @@
   },
   "plugins": [
     {
+      "name": "balance-test-binaries",
+      "source": "./skills/code_refinement/balance-test-binaries",
+      "description": "Cut the number of executables a Rust workspace links for its tests, keeping tests narrowable by name. Use when asked to speed up `cargo test` / `cargo nextest` builds, reduce link time, target/ size or disk writes from test builds, merge or consolidate integration tests, or apply matklad's \"delete cargo integration tests\" to a repo.",
+      "version": "0.1.0"
+    },
+    {
       "name": "excalidraw",
       "source": "./skills/excalidraw",
       "description": "Read, study or review an Excalidraw drawing (`.excalidraw`, `.excalidraw.json`, `.excalidraw.md`, excalidraw.com scenes): render it to PNG with a bundled renderer and look at it, cropped and zoomed per section. Use whenever excalidraw is mentioned, or a design board, whiteboard or sketch saved from it has to be understood, summarised, compared to code or redrawn.",
