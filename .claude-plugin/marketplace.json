@@ -11,7 +11,7 @@
       "name": "balance-test-binaries",
       "source": "./skills/code_refinement/balance-test-binaries",
       "description": "Cut the number of executables a Rust workspace links for its tests, keeping tests narrowable by name. Use when asked to speed up `cargo test` / `cargo nextest` builds, reduce link time, target/ size or disk writes from test builds, merge or consolidate integration tests, or apply matklad's \"delete cargo integration tests\" to a repo.",
-      "version": "0.1.0"
+      "version": "0.1.1"
     },
     {
       "name": "excalidraw",
