@@ -2,7 +2,7 @@
 name: skill-creation
 description: Write, restructure, test or tune an agent skill (a SKILL.md and the files it links) — one a repo ships about its own app, library or framework, one over an MCP server's tools, or a standalone procedure or domain. Use when asked to make, update, split, review, eval or benchmark a skill, fix one that does not trigger, or make a project or MCP server consumable by Claude Code, Codex, Kimi, opencode or other agents.
 metadata:
-  version: "0.3.0-alpha.1"
+  version: "0.3.0-alpha.2"
 ---
 
 # skill-creation
@@ -33,14 +33,22 @@ execution to the reader.
 - A skill speaks about its subject, never to whoever asked for it. Questions raised while writing it, and
   examples from that session, stay out unless an example shows what the statement alone cannot.
 - Specificity follows fragility: where many approaches work, give the reasons and let the reader choose; where
-  one wrong step breaks things, ship the exact script.
+  one wrong step breaks things, ship the exact script. Permissive wording where any way is valid is what lets a
+  hard rule read as meant.
 - Paths and ids are cited, never paraphrased. A moved path breaks loudly, a paraphrase rots silently.
 - What a hook, check or script enforces is not mentioned. Work every run repeats by hand becomes a script the
   skill ships.
 - Each idea takes the fewest words that carry it, with no justification, emphasis or capitals. A prohibition
   carries its mechanism; a rule without one gets reasoned around.
-- A rule lives in one file and others link it. A file exists only where an agent has a distinct job, and
-  describes what is, never what changed.
+- A rule lives in one file, at the step where it is acted on, scoped to the case that needs it; others link it.
+  A file exists only where an agent has a distinct job, and describes what is, never what changed.
+
+## Changing one
+
+A skill is code with no compiler, and its structure is all that holds it. A new understanding is integrated
+from the top down: every part it bears on is rewritten, as far as it bears on it. Lines appended beside the old
+ones dilute both. Then cut what it made redundant, and lift a principle that now covers several places to where
+it covers them all; edge cases and sections that are already minimal stay.
 
 ## Shape
 

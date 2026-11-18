@@ -35,7 +35,7 @@
       "name": "skill-creation",
       "source": "./skills/skill-creation",
       "description": "Write, restructure, test or tune an agent skill (a SKILL.md and the files it links) — one a repo ships about its own app, library or framework, one over an MCP server's tools, or a standalone procedure or domain. Use when asked to make, update, split, review, eval or benchmark a skill, fix one that does not trigger, or make a project or MCP server consumable by Claude Code, Codex, Kimi, opencode or other agents.",
-      "version": "0.3.0-alpha.1"
+      "version": "0.3.0-alpha.2"
     },
     {
       "name": "tracey",
