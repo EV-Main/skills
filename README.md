@@ -12,8 +12,8 @@ The EV team's agent skills, each versioned on its own, and `skargo`: Cargo-style
 
 With nix: `nix run github:EV-Main/skills -- <command>`, or, in home-manager:
 ```nix
-imports = [ inputs.skargo.homeManagerModules.default ]; # inputs.skargo.url = "github:EV-Main/skills";
-programs.skargo = { enable = true; lockFile = <path to your skargo.lock>; };
+imports = [ inputs.skargo.homeManagerModules.default ]; # inputs.skargo.url = "github:EV-Main/skills?ref=cached";
+programs.skargo = { enable = true; skills = { skill-creation = "0.3"; v-flakes.path = "/abs/v_flakes/docs/skill"; }; }; # `nix flake update skargo` bumps them
 ```
 
 Claude Code only, without skargo: `/plugin marketplace add EV-Main/skills`.

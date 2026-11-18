@@ -74,7 +74,7 @@ pub(crate) struct Release {
 #[serde(deny_unknown_fields)]
 pub(crate) struct Linked {
 	pub(crate) name: String,
-	/// Absolute: home-manager reads the lock from the store, where a relative path means nothing.
+	/// Absolute: the store's link to it resolves from the store, not from the manifest's dir.
 	pub(crate) path: PathBuf,
 }
 

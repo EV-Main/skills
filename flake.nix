@@ -36,7 +36,7 @@
             publishCachix = "valeratrades";
             lastSupportedVersion = "nightly-${v_flakes.rs.nightly_version}";
             jobs.default = true;
-            jobs.errors.install = { packages = [ "mold" "git" ]; }; # brings nix itself: tests check the home-manager module against the lock
+            jobs.errors.install = { packages = [ "mold" "git" ]; }; # brings nix itself: tests evaluate the home-manager module
             jobs.warnings.install = { packages = [ "mold" ]; debug = true; };
             skills.skargo = ".";
           };
@@ -57,9 +57,9 @@
             (pkgs.makeRustPlatform { rustc = build_rust; cargo = build_rust; inherit stdenv; }).buildRustPackage {
               pname = manifest.name;
               version = manifest.version;
-              src = pkgs.lib.cleanSource ./.;
+              src = pkgs.lib.fileset.toSource { root = ./.; fileset = pkgs.lib.fileset.unions [ ./Cargo.toml ./Cargo.lock ./src ./.cargo/config.toml ]; }; # a skill or catalogue commit then reuses the cached binary
               cargoLock.lockFile = ./Cargo.lock;
-              RUSTC_WRAPPER = ""; # .cargo/config.toml sets sccache, absent in the sandbox
+              RUSTC_WRAPPER = ""; # .cargo/config.toml sets kache, absent in the sandbox
               doCheck = false; # tests drive git and nix against fixture repos; CI runs them
               nativeBuildInputs = [ pkgs.makeWrapper ];
               postInstall = "wrapProgram $out/bin/${manifest.name} --prefix PATH : ${pkgs.lib.makeBinPath [ pkgs.git ]}";

@@ -570,22 +570,8 @@ fn publish_tags_head_and_pushes() {
 	assert_eq!(ok(publish()), "", "nothing left to release");
 }
 
-/// The lock is the contract between the CLI and the home-manager module.
-#[test]
-fn home_manager_module_links_what_the_lock_pins() {
-	let repo = Repo::new();
-	repo.release("skills/foo", "foo", "1.0.0");
-	repo.release("docs/skill", "bar", "0.2.0");
-	let m = Machine::new();
-	let checkout = m.0.path().join("checkout");
-	fs::create_dir_all(&checkout).unwrap();
-	fs::write(checkout.join("SKILL.md"), skill_md("live", "0.0.1")).unwrap();
-	m.manifest(&format!(
-		"foo = {{ git = \"{0}\", version = \"1\" }}\nbar = {{ git = \"{0}\", version = \"0.2\" }}\nlive = {{ path = \"../checkout\" }}\n",
-		repo.url()
-	));
-	ok(m.run(&["lock"]));
-
+/// Evaluates the home-manager module, its flake input being the registry checkout at `registry`; `body` sees `files = skills: <home.file>`.
+fn module_eval(registry: &Path, body: &str) -> Output {
 	let root = env!("CARGO_MANIFEST_DIR");
 	let expr = format!(
 		r#"
@@ -597,21 +583,59 @@ fn home_manager_module_links_what_the_lock_pins() {
 				options.lib = lib.mkOption {{ type = lib.types.attrsOf lib.types.anything; }};
 				config.lib.file.mkOutOfStoreSymlink = path: "out-of-store:${{path}}";
 			}};
-			eval = lib.evalModules {{
+			self = {{ outPath = "{registry}"; packages.test.default = "skargo"; }};
+			files = skills: (lib.evalModules {{
 				modules = [
-					(import {root}/nix/home-manager.nix {{ self.packages.test.default = "skargo"; }})
+					(import {root}/nix/home-manager.nix {{ inherit self; }})
 					stub
-					{{ programs.skargo = {{ enable = true; lockFile = {lock}; }}; }}
+					{{ programs.skargo = {{ enable = true; inherit skills; }}; }}
 				];
 				specialArgs.pkgs.stdenv.hostPlatform.system = "test";
-			}};
-		in builtins.mapAttrs (_: f: f.source) eval.config.home.file
+			}}).config.home.file;
+		in {body}
 		"#,
-		lock = m.work().join("skargo.lock").display(),
+		registry = registry.display(),
 	);
-	let out = Command::new("nix").args(["eval", "--impure", "--json", "--expr", &expr]).output().expect("nix on PATH");
-	assert!(out.status.success(), "nix eval: {}", String::from_utf8_lossy(&out.stderr));
-	let files: BTreeMap<String, String> = serde_json::from_slice(&out.stdout).unwrap();
+	Command::new("nix").args(["eval", "--impure", "--json", "--expr", &expr]).output().expect("nix on PATH")
+}
+
+/// A registry checkout whose marketplace lists each `(name, source, version)`.
+fn marketplace(plugins: impl IntoIterator<Item = (String, serde_json::Value, String)>) -> TempDir {
+	let dir = tempfile::tempdir().unwrap();
+	let plugins: Vec<_> = plugins
+		.into_iter()
+		.map(|(name, source, version)| serde_json::json!({ "name": name, "source": source, "version": version }))
+		.collect();
+	fs::create_dir_all(dir.path().join(".claude-plugin")).unwrap();
+	fs::write(dir.path().join(".claude-plugin/marketplace.json"), serde_json::json!({ "plugins": plugins }).to_string()).unwrap();
+	dir
+}
+
+/// The marketplace is the contract between the registry and the home-manager module.
+#[test]
+fn home_manager_module_links_what_the_marketplace_lists() {
+	let app = Repo::new();
+	let commit = app.release("docs/skill", "bar", "0.2.0");
+	let registry = marketplace([
+		("foo".to_owned(), "./skills/foo".into(), "1.1.0".to_owned()),
+		(
+			"bar".to_owned(),
+			serde_json::json!({ "source": "git-subdir", "url": app.url(), "path": "docs/skill", "ref": "bar--v0.2.0", "sha": commit }),
+			"0.2.0".to_owned(),
+		),
+	]);
+	fs::create_dir_all(registry.path().join("skills/foo")).unwrap();
+	fs::write(registry.path().join("skills/foo/SKILL.md"), skill_md("foo", "1.1.0")).unwrap();
+	let checkout = tempfile::tempdir().unwrap();
+
+	let out = module_eval(
+		registry.path(),
+		&format!(
+			r#"builtins.mapAttrs (_: f: f.source) (files {{ foo = "1"; bar = "0.2"; live.path = "{}"; }})"#,
+			checkout.path().display()
+		),
+	);
+	let files: BTreeMap<String, String> = serde_json::from_str(&ok(out)).unwrap();
 	assert_eq!(
 		files.keys().map(String::as_str).collect::<Vec<_>>(),
 		[
@@ -625,9 +649,102 @@ fn home_manager_module_links_what_the_lock_pins() {
 	);
 	assert_eq!(
 		files[".claude/skills/live"],
-		format!("out-of-store:{}", checkout.canonicalize().unwrap().display()),
+		format!("out-of-store:{}", checkout.path().display()),
 		"a live link, not a store copy"
 	);
-	assert_eq!(fs::read_to_string(Path::new(&files[".claude/skills/foo"]).join("SKILL.md")).unwrap(), skill_md("foo", "1.0.0"));
+	assert_eq!(fs::read_to_string(Path::new(&files[".claude/skills/foo"]).join("SKILL.md")).unwrap(), skill_md("foo", "1.1.0"));
 	assert_eq!(fs::read_to_string(Path::new(&files[".agents/skills/bar"]).join("SKILL.md")).unwrap(), skill_md("bar", "0.2.0"));
+
+	fails_with(
+		module_eval(registry.path(), r#"files { foo = "2"; }"#),
+		r#"foo requires "2", but the skargo input lists 1.1.0. Raise the requirement, or roll the input back"#,
+	);
+	fails_with(
+		module_eval(registry.path(), r#"files { nope = "1"; }"#),
+		"nope is not in the skargo input's marketplace, which lists: bar, foo. An external skill is listed in the registry's skargo.toml",
+	);
+}
+
+#[test]
+fn home_manager_module_matches_as_cargo_does() {
+	let cases: &[(&str, &str)] = &[
+		("1", "1.0.0"),
+		("1", "1.9.3"),
+		("1", "2.0.0"),
+		("1", "1.2.0-alpha"),
+		("1.2", "1.2.0"),
+		("1.2", "1.1.9"),
+		("1.2", "1.3.0"),
+		("1.2", "1.2.0-alpha"),
+		("1.2.3", "1.2.3"),
+		("1.2.3", "1.2.2"),
+		("1.2.3", "1.10.0"),
+		("1.2.3", "2.0.0"),
+		("1.9", "1.10.0"),
+		("1.10", "1.9.0"),
+		("1.10", "1.10.3"),
+		("9", "10.0.0"),
+		("9", "9.4.0"),
+		("10", "10.0.0"),
+		("1.0.0", "1.0.0+build.5"),
+		("1.0.0-beta", "1.0.0-alpha"),
+		("1.0.0-beta", "1.0.0"),
+		("1.0.0-beta", "1.5.0"),
+		("1.0.0-beta", "1.5.0-beta"),
+		("0", "0.0.0"),
+		("0", "0.9.9"),
+		("0", "1.0.0"),
+		("0.3", "0.3.0"),
+		("0.3", "0.3.7"),
+		("0.3", "0.4.0"),
+		("0.3", "0.3.0-alpha.2"),
+		("0.3.0-alpha", "0.3.0-alpha.2"),
+		("0.3.0-alpha", "0.3.0-alpha"),
+		("0.3.0-alpha", "0.3.0"),
+		("0.3.0-alpha", "0.3.1"),
+		("0.3.0-alpha", "0.3.1-alpha"),
+		("0.3.0-alpha", "0.3.0-1"),
+		("0.3.0-alpha", "0.4.0"),
+		("0.3.0-alpha.2", "0.3.0-alpha.10"),
+		("0.3.0-alpha.10", "0.3.0-alpha.2"),
+		("0.3.0-alpha.10", "0.3.0-alpha.11"),
+		("0.3.0-alpha.2", "0.3.0-alpha.beta"),
+		("0.3.0-alpha.2", "0.3.0-alpha"),
+		("0.1.2", "0.1.5"),
+		("0.1.2", "0.1.1"),
+		("0.1.2", "0.2.0"),
+		("0.0", "0.0.0"),
+		("0.0", "0.0.5"),
+		("0.0", "0.1.0"),
+		("0.0.3", "0.0.3"),
+		("0.0.3", "0.0.4"),
+		("0.0.3", "0.0.2"),
+		("0.0.3-rc.1", "0.0.3"),
+		("0.0.3-rc.1", "0.0.3-rc.0"),
+		("0.0.3-rc.1", "0.0.3-rc.2"),
+	];
+	let cargo = |req: &str, v: &str| semver::VersionReq::parse(req).unwrap().matches(&semver::Version::parse(v).unwrap());
+	for (req, _) in cases {
+		assert!(
+			cases.iter().any(|(r, v)| r == req && cargo(r, v)),
+			"{req:?} needs a matching pair, else a parse error passes for a mismatch"
+		);
+	}
+	let registry = marketplace(cases.iter().enumerate().map(|(i, (_, v))| (format!("c{i}"), format!("./skills/c{i}").into(), v.to_string())));
+	let ok_each = |reqs: &mut dyn Iterator<Item = (usize, &str)>| {
+		let verdicts = reqs.map(|(i, req)| format!(r#"(ok {{ c{i} = "{req}"; }})"#)).collect::<Vec<_>>().join(" ");
+		let out = module_eval(
+			registry.path(),
+			&format!("let ok = skills: (builtins.tryEval (builtins.deepSeq (files skills) true)).success; in [ {verdicts} ]"),
+		);
+		serde_json::from_str::<Vec<bool>>(&ok(out)).unwrap()
+	};
+	let nix = ok_each(&mut cases.iter().enumerate().map(|(i, (req, _))| (i, *req)));
+	for ((req, v), nix) in cases.iter().zip(nix) {
+		assert_eq!(nix, cargo(req, v), "{req:?} against {v}");
+	}
+
+	let other_forms = ["~1", "=1.2.3", ">=1", "1.*", "*", "01", "1.02", "1.2.3+build", "1.2.3-01", " 1", "1, 2"];
+	assert_eq!(ok_each(&mut other_forms.iter().map(|req| (0, *req))), vec![false; other_forms.len()], "{other_forms:?}");
+	fails_with(module_eval(registry.path(), r#"files { c0 = "~1"; }"#), r#"c0 = "~1" is not a bare version requirement"#);
 }

@@ -14,6 +14,7 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       contents: write
+      actions: write # dispatching cachix
     steps:
       - uses: actions/checkout@v5
         with:
@@ -37,3 +38,6 @@ jobs:
           git diff --cached --quiet && exit 0
           git -c user.name=github-actions -c user.email=github-actions@github.com commit -m "registry: skargo update"
           git push origin HEAD:main
+          gh workflow run cachix.yml --ref main # a GITHUB_TOKEN push triggers no workflow, so `cached` would never reach it
+        env:
+          GH_TOKEN: ${{ github.token }}
